@@ -101,57 +101,6 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                 .append("! How did you manage that!?").toString());
     }
 
-    public String getStr(int type, boolean isA) {
-        if (type >= 32)
-            return Integer.toHexString((type & 31) + 65535 & 65535);
-        switch (type & 248) {
-        case 0: // '\0'
-            return (new StringBuilder()).append("ABCXYZIJ".charAt(type & 7))
-                    .toString();
-
-        case 8: // '\b'
-            return (new StringBuilder("[")).append("ABCXYZIJ".charAt(type & 7))
-                    .append("]").toString();
-
-        case 16: // '\020'
-            return (new StringBuilder("["))
-                    .append(Integer.toHexString(ram[pc++])).append("+")
-                    .append("ABCXYZIJ".charAt(type & 7)).append("]").toString();
-
-        case 24: // '\030'
-            switch (type & 7) {
-            case 0: // '\0'
-                return isA ? "POP" : "PUSH";
-
-            case 1: // '\001'
-                return "PEEK";
-
-            case 2: // '\002'
-                return (new StringBuilder("["))
-                        .append(Integer.toHexString(ram[pc++])).append("+SP]")
-                        .toString();
-
-            case 3: // '\003'
-                return "SP";
-
-            case 4: // '\004'
-                return "PC";
-
-            case 5: // '\005'
-                return "EX";
-
-            case 6: // '\006'
-                return (new StringBuilder("["))
-                        .append(Integer.toHexString(ram[pc++])).append("]")
-                        .toString();
-            }
-            return Integer.toHexString(ram[pc++]);
-        }
-        throw new IllegalStateException((new StringBuilder(
-                "Illegal value type ")).append(Integer.toHexString(type))
-                .append("! How did you manage that!?").toString());
-    }
-
     public int getAddrA(int type) {
         if (type >= 32)
             return 131072 | (type & 31) + 65535 & 65535;
@@ -340,7 +289,7 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                 int aaddr = getAddrA(atype);
                 a = get(aaddr);
                 switch (cmd) {
-                case 1: // '\001'
+                case JSR: // '\001'
                     cycles += 2;
                     ram[--sp & 65535] = pc;
                     pc = a;
@@ -350,31 +299,31 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                     cycles += 8;
                     break;
 
-                case 8: // '\b'
+                case INT: // '\b'
                     cycles += 3;
                     interrupt(a);
                     break;
 
-                case 9: // '\t'
+                case IAG: // '\t'
                     set(aaddr, in);
                     break;
 
-                case 10: // '\n'
+                case IAS: // '\n'
                     in = a;
                     break;
 
-                case 16: // '\020'
+                case HWN: // '\020'
                     cycles++;
                     set(aaddr, (char) hardware.size());
                     break;
 
-                case 17: // '\021'
+                case HWQ: // '\021'
                     cycles += 3;
                     if (a >= 0 && a < hardware.size())
                         ((DCPUHardware) hardware.get(a)).query();
                     break;
 
-                case 18: // '\022'
+                case HWI: // '\022'
                     cycles += 3;
                     if (a >= 0 && a < hardware.size())
                         ((DCPUHardware) hardware.get(a)).interrupt();
@@ -393,50 +342,39 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
             default:
                 break;
 
-            case 1: // '\001'
-            {
+            case SET: { // '\001'
                 b = a;
                 break;
             }
-
-            case 2: // '\002'
-            {
+            case ADD: { // '\002'
                 cycles++;
                 int val = b + a;
                 b = (char) val;
                 ex = (char) (val >> 16);
                 break;
             }
-
-            case 3: // '\003'
-            {
+            case SUB: { // '\003'
                 cycles++;
                 int val = b - a;
                 b = (char) val;
                 ex = (char) (val >> 16);
                 break;
             }
-
-            case 4: // '\004'
-            {
+            case MUL: { // '\004'
                 cycles++;
                 int val = b * a;
                 b = (char) val;
                 ex = (char) (val >> 16);
                 break;
             }
-
-            case 5: // '\005'
-            {
+            case MLI: { // '\005'
                 cycles++;
                 int val = (short) b * (short) a;
                 b = (char) val;
                 ex = (char) (val >> 16);
                 break;
             }
-
-            case 6: // '\006'
-            {
+            case DIV: { // '\006'
                 cycles += 2;
                 if (a == 0) {
                     b = ex = '\0';
@@ -447,9 +385,7 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                 }
                 break;
             }
-
-            case 7: // '\007'
-            {
+            case DVI: { // '\007'
                 cycles += 2;
                 if (a == 0) {
                     b = ex = '\0';
@@ -460,9 +396,7 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                 }
                 break;
             }
-
-            case 8: // '\b'
-            {
+            case MOD: { // '\b'
                 cycles += 2;
                 if (a == 0)
                     b = '\0';
@@ -470,123 +404,94 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                     b %= a;
                 break;
             }
+            case MDI: { // '\b'
+                cycles += 2;
+                if (a == 0)
+                    b = '\0';
+                else
+                    b = (char)(((short)b) % ((short)a));
+                break;
+            }
 
-            case 9: // '\t'
-            {
+            case AND: { // '\t'
                 b &= a;
                 break;
             }
-
-            case 10: // '\n'
-            {
+            case BOR: { // '\n'
                 b |= a;
                 break;
             }
-
-            case 11: // '\013'
-            {
+            case XOR: { // '\013'
                 b ^= a;
                 break;
             }
-
-            case 12: // '\f'
-            {
+            case SHR: { // '\f'
                 cycles++;
                 ex = (char) ((b << 16) >> a);
                 b >>>= a;
                 break;
             }
-
-            case 13: // '\r'
-            {
+            case ASR: { // '\r'
                 cycles++;
                 ex = (char) ((b << 16) >>> a);
                 b >>= a;
                 break;
             }
-
-            case 14: // '\016'
-            {
+            case SHL: { // '\016'
                 cycles++;
                 ex = (char) ((b << a) >> 16);
                 b <<= a;
                 break;
             }
-
-            case 15: // '\017'
-            {
-                b = a;
-                registers[6]++;
-                registers[7]++;
-                break;
-            }
-
-            case 16: // '\020'
-            {
+            case IFB: { // '\020'
                 cycles++;
                 if ((b & a) == 0)
                     skip();
                 return;
             }
-
-            case 17: // '\021'
-            {
+            case IFC: { // '\021'
                 cycles++;
                 if ((b & a) != 0)
                     skip();
                 return;
             }
-
-            case 18: // '\022'
-            {
+            case IFE: { // '\022'
                 cycles++;
                 if (b != a)
                     skip();
                 return;
             }
-
-            case 19: // '\023'
-            {
+            case IFN: { // '\023'
                 cycles++;
                 if (b == a)
                     skip();
                 return;
             }
-
-            case 20: // '\024'
-            {
+            case IFG: { // '\024'
                 cycles++;
                 if (b <= a)
                     skip();
                 return;
             }
-
-            case 21: // '\025'
-            {
+            case IFA: { // '\025'
                 cycles++;
                 if ((short) b <= (short) a)
                     skip();
                 return;
             }
-
-            case 22: // '\026'
-            {
+            case IFL: { // '\026'
                 cycles++;
                 if (b >= a)
                     skip();
                 return;
             }
-
-            case 23: // '\027'
-            {
+            case IFU: { // '\027'
                 cycles++;
                 if ((short) b >= (short) a)
                     skip();
                 return;
             }
-
-            case 26: // '\032'
-            {
+            case ADX: { // '\032'
                 cycles++;
                 int val = b + a + ex;
                 b = (char) val;
@@ -594,14 +499,26 @@ public class NotchsDCPU extends BaseDCPU implements RunnableDCPU {
                 break;
             }
 
-            case 27: // '\033'
-            {
+            case SBX: { // '\033'
                 cycles++;
                 int val = (b - a) + ex;
                 b = (char) val;
                 ex = (char) (val >> 16);
                 break;
             }
+            case STI: { // '\017'
+                b = a;
+                registers[REG_I]++;
+                registers[REG_J]++;
+                break;
+            }
+            case STD: { // '\017'
+                b = a;
+                registers[REG_I]--;
+                registers[REG_J]--;
+                break;
+            }
+
             }
             set(baddr, b);
         }
